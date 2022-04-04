@@ -3,6 +3,9 @@
 #include "../../../BenchMark/Timer.h"
 #include <fstream>
 #include <iostream>
+#include <thread>
+#include <sstream>
+
 #ifdef TEST
 TEST_CASE("test-string","[string-test]"){
     std::stringstream ss;
@@ -57,16 +60,65 @@ TEST_CASE("test-int","[test-int]"){
     }
 }
 #endif
-int main(){
-    std::ios::sync_with_stdio(false);
-    for(int i=0;i<50;i++){
-        std::ifstream ifs("../debian-iso.tt",std::ifstream::binary);
-        std::ofstream ofs("../debian-iso(1).tt",std::ofstream::binary);
-        Timer timer;//这是我本地写的一个计时类，利用的RAII特性计时
-        if(ifs){//TODO 得到解码又编码后的数据
-            auto obj = bencode::BObject::Parse(ifs, nullptr);
-            if(obj)
-                obj->Bencode(ofs);
-        }
+
+
+
+//test custom type
+struct Student {
+    int id;
+    std::string name;
+    std::vector<std::string> ip;
+    std::unordered_map<std::string, int> mapping;
+};
+
+using namespace bencode;
+
+void to_bencode(Bencode &obj, Student &student) {
+    obj["id"] = student.id;
+    obj["name"] = student.name;
+    obj["ip"] = student.ip;
+    obj["mapping"] = student.mapping;
+}
+
+void from_bencode(Bencode &obj, Student &student) {
+    student.id = obj["id"].get<int>();
+    student.name = obj["name"].get<std::string>();
+    student.ip = obj["ip"].get<std::vector<std::string>>();
+    student.mapping = obj["mapping"].get<std::unordered_map<std::string, int>>();
+}
+
+void printStudent(Student const &student) {
+    std::cout << student.name << '\n';
+    std::cout << student.id << '\n';
+    for (const auto &item: student.ip) {
+        std::cout << item << "  ";
     }
+    std::cout << '\n';
+    for (auto &&[k, v]: student.mapping) {
+        std::cout << "k:" << k << "  " << "v:" << v << '\n';
+    }
+}
+
+int main() {
+    std::stringstream ss;
+    Student student{
+        .id = 2002,
+        .name = "刘xx",
+        .ip = {
+          "2329323",
+          "3432424",
+          "23434322"
+        },
+        .mapping = {
+                {"test",283},
+                {"testname",3232}
+        }
+    };
+    Bencode b;
+    b<<student;
+    ss<<b;
+    std::cout<<ss.str()<<std::endl;
+    Student tmp;
+    b>>tmp;
+    printStudent(tmp);
 }

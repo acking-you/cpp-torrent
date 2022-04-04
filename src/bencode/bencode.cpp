@@ -12,7 +12,8 @@ using bencode::BType;
 using bencode::BObject;
 using std::string;
 
-void bencode::perror(bencode::Error error_code) {
+void bencode::perror(bencode::Error error_code, const char *info) {
+    if (info)cerr << info << "  ";
     switch (error_code) {
         case Error::ErrNum:
             cerr << "expect num\n";
@@ -36,6 +37,27 @@ void bencode::perror(bencode::Error error_code) {
             cerr << "no error\n";
     }
 }
+
+bencode::BObject::operator std::string() {
+    Error error;
+    auto str = Str(&error);
+    if (!str) {
+        perror(error);
+        exit(-1);
+    }
+    return *str;
+}
+
+bencode::BObject::operator int() {
+    Error error;
+    auto val = Int(&error);
+    if (!val) {
+        perror(error);
+        exit(-1);
+    }
+    return *val;
+}
+
 
 std::string *bencode::BObject::Str(Error *error_code) {
     if (this->type != BType::BSTR) {
@@ -98,7 +120,11 @@ int bencode::BObject::Bencode(std::ostream &os) {
             if (val) {
                 LIST &t = *(LIST *) val;
                 for (auto &&item: t) {
-                    wLen += item->Bencode(os);
+                    if (item)
+                        wLen += item->Bencode(os);
+                    else {
+                        perror(Error::ErrIvd, "pointer null! line 127");
+                    }
                 }
             }
             os << 'e';
@@ -322,6 +348,8 @@ bencode::BObject::BObject(BObject::DICT dict) : value(std::move(dict)), type(BTy
 bencode::BObject::BObject(const char *str) : BObject(string(str)) {
 
 }
+
+
 
 
 
