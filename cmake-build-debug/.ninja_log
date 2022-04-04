@@ -1,0 +1,5 @@
+# ninja log v5
+1462	2270	6707130074609968	cpp-torrent.exe	1e81005210ae87f5
+10	1169	6707130068922042	CMakeFiles/cpp-torrent.dir/src/bencode/bencode_test.cpp.obj	30819571ac958b72
+10	64	6707121519906429	CMakeFiles/cpp-torrent.dir/src/catch2_test_config.cpp.obj	d01cba885ef16a64
+3	1461	6707130071819329	CMakeFiles/cpp-torrent.dir/src/bencode/bencode.cpp.obj	b96a958038876c06
