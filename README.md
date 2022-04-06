@@ -33,7 +33,7 @@ struct Student {
 
 using namespace bencode;
 
-void to_bencode(Bencode &obj, Student &student) {
+void to_bencode(Bencode &obj,const Student &student) {
     obj["id"] = student.id;
     obj["name"] = student.name;
     obj["ip"] = student.ip;
