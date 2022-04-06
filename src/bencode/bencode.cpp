@@ -321,11 +321,13 @@ BObject &bencode::BObject::operator=(string str) {
 }
 
 BObject &bencode::BObject::operator=(BObject::LIST list) {
+    type = BType::BLIST;
     value = std::move(list);
     return *this;
 }
 
 BObject &bencode::BObject::operator=(DICT dict) {
+    type = BType::BDICT;
     value = std::move(dict);
     return *this;
 }

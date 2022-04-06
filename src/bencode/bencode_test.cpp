@@ -5,6 +5,7 @@
 #include <iostream>
 #include <thread>
 #include <sstream>
+#include <nlohmann/json.hpp>
 
 #ifdef TEST
 TEST_CASE("test-string","[string-test]"){
@@ -62,63 +63,59 @@ TEST_CASE("test-int","[test-int]"){
 #endif
 
 
-
-//test custom type
-struct Student {
-    int id;
+struct TorrentInfo{
+    int length;
     std::string name;
-    std::vector<std::string> ip;
-    std::unordered_map<std::string, int> mapping;
+    int piece_length;
+    std::string pieces;
+};
+//test custom type
+struct Torrent {
+    std::string announce;
+    std::string created_by;
+    int creation_data;
+    TorrentInfo info;
 };
 
 using namespace bencode;
 
-void to_bencode(Bencode &obj, Student &student) {
-    obj["id"] = student.id;
-    obj["name"] = student.name;
-    obj["ip"] = student.ip;
-    obj["mapping"] = student.mapping;
+    void to_bencode(Bencode &obj,const Torrent &student) {
+        obj["announce"] =  student.announce;
+        obj["created by"]= student.created_by ;
+        obj["creation date"]= student.creation_data;
+        obj["info"]= student.info;
+    }
+    void to_bencode(Bencode& obj,const TorrentInfo& info){
+        obj["name"] = info.name;
+        obj["length"] = info.length;
+        obj["piece length"] = info.piece_length;
+        obj["pieces"] = info.pieces;
+    }
+
+
+
+void from_bencode(Bencode &obj, Torrent &student) {
+    student.announce = obj["announce"].get<std::string>();
+    student.created_by = obj["created by"].get<std::string>();
+    student.creation_data = obj["creation date"].get<int>();
+    student.info = obj["info"].get<TorrentInfo>();
 }
 
-void from_bencode(Bencode &obj, Student &student) {
-    student.id = obj["id"].get<int>();
-    student.name = obj["name"].get<std::string>();
-    student.ip = obj["ip"].get<std::vector<std::string>>();
-    student.mapping = obj["mapping"].get<std::unordered_map<std::string, int>>();
+void from_bencode(Bencode& obj,TorrentInfo& info){
+    info.name = obj["name"].get<std::string>();
+    info.length = obj["length"].get<int>();
+    info.piece_length = obj["piece length"].get<int>();
+    info.pieces = obj["pieces"].get<std::string >();
 }
 
-void printStudent(Student const &student) {
-    std::cout << student.name << '\n';
-    std::cout << student.id << '\n';
-    for (const auto &item: student.ip) {
-        std::cout << item << "  ";
-    }
-    std::cout << '\n';
-    for (auto &&[k, v]: student.mapping) {
-        std::cout << "k:" << k << "  " << "v:" << v << '\n';
-    }
-}
+
+
 
 int main() {
-    std::stringstream ss;
-    Student student{
-        .id = 2002,
-        .name = "刘xx",
-        .ip = {
-          "2329323",
-          "3432424",
-          "23434322"
-        },
-        .mapping = {
-                {"test",283},
-                {"testname",3232}
-        }
-    };
-    Bencode b;
-    b<<student;
-    ss<<b;
-    std::cout<<ss.str()<<std::endl;
-    Student tmp;
-    b>>tmp;
-    printStudent(tmp);
+    //std::ifstream ifs("../test.tt",ifs.binary);
+    //if(!ifs){
+    //    std::cout<<"no file";
+    //    return 0;
+    //}
+
 }

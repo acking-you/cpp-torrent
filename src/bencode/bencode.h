@@ -52,7 +52,7 @@ namespace bencode {
 
         BObject() = default;
 
-        //TODO 隐式转化五件套
+        // 隐式转化五件套
         BObject(std::string);
 
         BObject(const char *str);
@@ -103,7 +103,7 @@ namespace bencode {
         static int getIntLen(int val);
     };
 
-    //TODO 用于直接序列化的工具模板类
+    // 用于直接序列化的工具模板类
 
     using LIST = BObject::LIST;
     using DICT = BObject::DICT;//方便外面少写一个区域名
@@ -160,8 +160,20 @@ namespace bencode {
         }
 
         BEntity &put(const std::string &key, BObject value) {
+            if (!dict) {
+                perror(Error::ErrIvd, "dict nullptr put dict error! line 164");
+                exit(-1);
+            }
             dict->emplace(key, std::make_shared<BObject>(std::move(value)));
             return *this;
+        }
+
+        void clear() const {
+            if (!dict) {
+                perror(Error::ErrIvd, "dict nullptr clear dict error! line 169");
+                exit(-1);
+            }
+            dict->clear();
         }
 
         int bencode(std::ostream &os) {
@@ -262,13 +274,49 @@ namespace bencode {
         }
     };
 
-
+    // type trait
     template<class T>
-    extern void to_bencode(Bencode &bEntity, T &src);
+    struct isVector {
+        static const bool value = false;
+    };
+    template<class T>
+    struct isVector<std::vector<T>> {
+        static const bool value = true;
+    };
+    template<class T>
+    struct isMap {
+        static const bool value = false;
+    };
+    template<class T>
+    struct isMap<std::unordered_map<std::string, T>> {
+        static const bool value = true;
+    };
+    template<class T>
+    struct isBasicType {
+        static const bool value = false;
+    };
+    template<>
+    struct isBasicType<int> {
+        static const bool value = true;
+    };
+    template<>
+    struct isBasicType<std::string> {
+        static const bool value = true;
+    };
+    template<>
+    struct isBasicType<const char *> {
+        static const bool value = true;
+    };
+
+
+
+// 函数声明
+    template<class T>
+    extern void to_bencode(Bencode &bEntity, const T &src);
 
     template<class T>
     extern void from_bencode(BEntity<T> &bEntity, T &src);
-
+    // bencode解析类的本体
     class Bencode {
         BEntity<DICT> m_dict;
         std::string cur_key;
@@ -280,100 +328,154 @@ namespace bencode {
             return *this;
         }
 
-        Bencode &operator=(BObject object) {
+        template<class T>
+        Bencode &operator=(const T& src) {
             if (cur_key.empty()) {
                 perror(Error::ErrIvd, "operator= valid because of string empty line 277");
                 exit(-1);
             }
-            m_dict.put(cur_key, std::move(object));
+            BObject obj;
+            if constexpr(isBasicType<T>::value) {// 如果是基本类型直接走简单逻辑赋值
+                obj = std::move(BObject(src));
+            } else if constexpr(isVector<T>::value) {
+                obj = std::move(LIST());
+                putVector(obj, src);
+            } else if constexpr(isMap<T>::value) {
+                obj = std::move(DICT());
+                putMap(obj, src);
+            } else if constexpr(!isBasicType<T>::value) {// 如果是外界的复合类型，则走外界函数逻辑产生递归效果，并且注意需要生成一个新的dict来添加元素！
+                std::string pre_key = cur_key;
+                obj = std::move(DICT());
+                auto new_dict = getNewDict(obj);
+
+                auto old_dict = m_dict.dict;
+                m_dict.dict = new_dict;
+                to_bencode(*this, src);
+                m_dict.dict = old_dict;
+                cur_key = pre_key;
+            }
+            m_dict.put(cur_key, std::move(obj));
             return *this;
         }
 
         template<class T>
-        Bencode &operator=(const std::vector<T> &src) {
-            if (cur_key.empty()) {
-                perror(Error::ErrIvd, "operator= valid because of string empty line 287");
-                exit(-1);
-            }
-
-            BObject listObj((LIST()));
-            auto list = listObj.List();
-            if (!list) {
-                perror(Error::ErrIvd, "list get error in operator= at line293");
-                exit(-1);
-            }
-
-            for (const auto &item: src) {
-                list->emplace_back(std::make_shared<BObject>(item));
-            }
-            m_dict.put(cur_key, std::move(listObj));
-            return *this;
-        }
-
-        template<class T>
-        Bencode &operator=(const std::unordered_map<std::string, T> &src) {
-            if (cur_key.empty()) {
-                perror(Error::ErrIvd, "operator= valid because of string empty line 308");
-                exit(-1);
-            }
-
-            BObject dictObj((DICT()));
-            auto dict = dictObj.Dict();
+        void putMap(BObject &dest, const std::unordered_map<std::string, T> &src) {
+            auto dict = dest.Dict();
             if (!dict) {
-                perror(Error::ErrIvd, "list get error in operator= at line 315");
+                perror(Error::ErrIvd, "object change dict error int putMap, line 312");
                 exit(-1);
             }
-
             for (auto&&[k, v]: src) {
-                dict->emplace(k, std::make_shared<BObject>(v));
+                BObject obj;
+                if constexpr(isBasicType<T>::value) {
+                    obj = BObject(v);
+                } else if constexpr(isMap<T>::value) {
+                    obj = std::move(DICT());
+                    putMap(obj, v);
+                } else if constexpr(isVector<T>::value) {
+                    obj = std::move(LIST());
+                    putVector(obj, v);
+                } else if constexpr(!isBasicType<T>::value) {// 自定义类型情况，说明当前的哈希表value值是一个dict需要替换成这个dict然后再调用get函数即可
+                    obj = std::move(DICT());
+                    auto new_dict = getNewDict(obj);
+
+                    auto pre_dict = m_dict.dict;
+                    auto pre_key = cur_key;
+
+                    m_dict.dict = new_dict;
+                    to_bencode(*this, v);
+                    m_dict.dict = pre_dict;
+                    cur_key = pre_key;
+                }
+                dict->emplace(cur_key, std::make_shared<BObject>(std::move(obj)));
             }
-            m_dict.put(cur_key, std::move(dictObj));
-            return *this;
-        }
-
-
-        //TODO type trait
-        template<class T>
-        static constexpr bool isVector(const std::vector<T> &v) {
-            return true;
         }
 
         template<class T>
-        static constexpr bool isVector(const T &v) {
-            return false;
+        void putVector(BObject &dest, const std::vector<T> &src) {
+            auto list = dest.List();
+            if (!list) {
+                perror(Error::ErrIvd, "object change list error int putVector, line 345");
+                exit(-1);
+            }
+            for (auto &&v: src) {
+                BObject obj;
+                if constexpr(isBasicType<T>::value) {
+                    obj = BObject(v);
+                } else if constexpr(isMap<T>::value) {
+                    obj = std::move(DICT());
+                    putMap(obj, v);
+                } else if constexpr(isVector<T>::value) {
+                    obj = std::move(LIST());
+                    putVector(obj, v);
+                } else if constexpr(!isBasicType<T>::value) {// 自定义类型情况，和getMap唯一的不同在于不需要维护之前的cur_key字段了
+                    obj = std::move(DICT());
+                    auto new_dict = getNewDict(obj);
+
+                    auto pre_dict = m_dict.dict;
+
+                    m_dict.dict = new_dict;
+                    to_bencode(*this, v);
+                    m_dict.dict = pre_dict;
+                }
+                list->template emplace_back(std::make_shared<BObject>(std::move(obj)));
+            }
+        }
+
+
+        static DICT *getNewDict(BObject &src) {
+            auto new_dict = src.Dict();
+            if (!new_dict) {
+                perror(Error::ErrIvd, "dict change failed! line 430");
+                exit(-1);
+            }
+            return new_dict;
+        }
+
+        static LIST *getNewList(BObject &src) {
+            auto new_list = src.List();
+            if (!new_list) {
+                perror(Error::ErrIvd, "list change failed line 475");
+                exit(-1);
+            }
+            return new_list;
         }
 
         template<class T>
-        static constexpr bool isMap(const std::unordered_map<std::string, T> &v) {
-            return true;
-        }
-
-        template<class T>
-        static constexpr bool isMap(const std::map<std::string, T> &v) {
-            return true;
-        }
-
-        template<class T>
-        static constexpr bool isMap(const T &v) {
-            return false;
-        }
-
-
-        template<class T>
-        static void getMap(std::unordered_map<std::string, T> &obj, BObject &src) {
+        void getMap(std::unordered_map<std::string, T> &obj, BObject &src) {
             Error error;
             auto dict = src.Dict(&error);
             if (dict == nullptr) {
                 perror(error, "In getMap line 310");
                 exit(-1);
             }
+
             for (auto&&[k, v]: *dict) {
-                obj.emplace(k, T(*v));
+                if (!v) {
+                    perror(Error::ErrIvd, "null ptr Exception line 399");
+                    exit(-1);
+                }
+                T tmp;
+                BObject &m_data = *v;
+                if constexpr(isBasicType<T>::value) {
+                    tmp = T(m_data);
+                } else if constexpr(isMap<T>::value) {
+                    getMap(tmp, m_data);
+                } else if constexpr(isVector<T>::value) {
+                    getVector(tmp, m_data);
+                } else if constexpr(!isBasicType<T>::value) {// 自定义类型情况，说明当前的哈希表value值是一个dict需要替换成这个dict然后再调用get函数即可
+                    auto new_dict = getNewDict(m_data);
+                    auto pre = m_dict.dict;
+                    m_dict.dict = new_dict;
+                    tmp = get<T>();// recurse
+                    m_dict.dict = pre;
+                }
+                obj.emplace(k, std::move(tmp));
             }
         }
 
         template<class T>
-        static void getVector(std::vector<T> &obj, BObject &src) {
+        void getVector(std::vector<T> &obj, BObject &src) {
             Error error;
             auto list = src.List(&error);
             if (list == nullptr) {
@@ -381,40 +483,140 @@ namespace bencode {
                 exit(-1);
             }
             for (auto &&v: *list) {
-                obj.emplace_back(T(*v));
+                if (!v) {
+                    perror(Error::ErrIvd, "null ptr Exception line 434");
+                    exit(-1);
+                }
+                BObject &m_data = *v;
+                T tmp;
+                if constexpr(isBasicType<T>::value) {
+                    tmp = T(m_data);
+                } else if constexpr(isMap<T>::value) {
+                    getMap(tmp, m_data);
+                } else if constexpr(isVector<T>::value) {
+                    getVector(tmp, m_data);
+                } else {// 自定义类型情况
+                    auto new_dict = getNewDict(m_data);
+                    auto pre = m_dict.dict;
+                    m_dict.dict = new_dict;
+                    tmp = get<T>();// recurse
+                    m_dict.dict = pre;
+                }
+                obj.emplace_back(std::move(tmp));
             }
         }
 
         template<class T>
         T get() {
+            if (!m_dict.dict) {
+                perror(Error::ErrIvd, "null ptr Exception at get line 441");
+                exit(-1);
+            }
             auto it = m_dict.dict->find(cur_key);
-            T ret;
+            T ret{};
             if (it != m_dict.dict->end()) {
                 BObject &object = *it->second;
-                if constexpr(isMap(ret)) {
+                if constexpr(isMap<T>::value) {
                     getMap(ret, object);
-                } else if constexpr(isVector(ret)) {
+                } else if constexpr(isVector<T>::value) {
                     getVector(ret, object);
-                } else {
+                } else if constexpr(isBasicType<T>::value) {
                     ret = T(object);
+                } else if constexpr(!isBasicType<T>::value) {// 如果是自定义类型，则说明此时object是一个dict，然后更改遍历的dict递归即可
+                    auto new_dict = getNewDict(object);
+                    auto pre = m_dict.dict;
+                    m_dict.dict = new_dict;
+                    from_bencode(*this, ret);
+                    m_dict.dict = pre;
                 }
             }
             return ret;
         }
 
 
+        // overload operator<<
         template<class T>
-        friend Bencode &operator<<(Bencode &bencode, T &src) {
+        friend Bencode &operator<<(Bencode &bencode, const T &src) {
+            bencode.m_dict.clear(); //把原先的数据先清空
             to_bencode(bencode, src);
             return bencode;
         }
 
+        template<class T>
+        friend Bencode &operator<<(Bencode &bencode, std::unordered_map<std::string, T> const &src) {
+            bencode.m_dict.clear(); //把原先的数据先清空
+            BObject &obj = *bencode.m_dict.object;
+            bencode.template putMap(obj, src);
+            return bencode;
+        }
+
+
+        template<class T>
+        friend Bencode &operator<<(Bencode &bencode, std::vector<T> const &src) {
+            bencode.m_dict.clear(); //把原先的数据先清空
+            BObject &obj = *bencode.m_dict.object;
+            obj = LIST();
+            bencode.m_dict.dict = nullptr;//破坏了原有的dict
+            bencode.template putVector(obj, src);
+            return bencode;
+        }
+
+        friend Bencode &operator<<(Bencode &bencode, const std::string &src) {
+            bencode.m_dict.clear();
+            *bencode.m_dict.object = src;
+            bencode.m_dict.dict = nullptr; // 破坏了原有的dict结构
+            return bencode;
+        }
+
+        friend Bencode &operator<<(Bencode &bencode, const int &src) {
+            bencode.m_dict.clear();
+            *bencode.m_dict.object = src;
+            bencode.m_dict.dict = nullptr; // 破坏了原有的dict结构
+            return bencode;
+        }
+
+        friend Bencode &operator<<(Bencode &bencode, const char *src) {
+            bencode.m_dict.clear();
+            *bencode.m_dict.object = std::string(src);
+            bencode.m_dict.dict = nullptr; // 破坏了原有的dict结构
+            return bencode;
+        }
+
+        // overload operator>>
         template<class T>
         friend Bencode &operator>>(Bencode &bencode, T &src) {
             from_bencode(bencode, src);
             return bencode;
         }
 
+        template<class T>
+        friend Bencode &operator>>(Bencode &bencode, std::unordered_map<std::string, T> &dest) {
+            BObject &obj = *bencode.m_dict.object;
+            bencode.template getMap(dest, obj);
+            return bencode;
+        }
+
+        template<class T>
+        friend Bencode &operator>>(Bencode &bencode, std::vector<T> &dest) {
+            BObject &obj = *bencode.m_dict.object;
+            bencode.template getVector(dest, obj);
+            return bencode;
+        }
+
+        friend Bencode &operator>>(Bencode &bencode, std::string &dest) {
+            BObject &obj = *bencode.m_dict.object;
+            dest = std::move(std::string(obj));
+            return bencode;
+        }
+
+        friend Bencode &operator>>(Bencode &bencode, int &dest) {
+            BObject &obj = *bencode.m_dict.object;
+            dest = obj;
+            return bencode;
+        }
+
+
+        // overload stream operator<< and operator>>
         friend std::ostream &operator<<(std::ostream &os, Bencode &bencode) {
             bencode.m_dict.bencode(os);
             return os;
@@ -423,14 +625,20 @@ namespace bencode {
         friend std::istream &operator>>(std::istream &is, Bencode &bencode) {
             Error error;
             bencode.m_dict.object = std::move(BObject::Parse(is, &error));
+
             if (error != Error::NoError) {
                 perror(error);
                 exit(-1);
             }
+            bencode.m_dict.dict = bencode.m_dict.object->Dict(&error);
+            if (error != Error::NoError) {
+                perror(error, "in operator>> stream not a dict! line 635\n");
+                exit(-1);
+            }
             return is;
         }
-
     };
+
 }
 
 

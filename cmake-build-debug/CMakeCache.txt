@@ -300,6 +300,12 @@ cpp-torrent_IS_TOP_LEVEL:STATIC=ON
 //Value Computed by CMake
 cpp-torrent_SOURCE_DIR:STATIC=D:/CLion Project/cpp-torrent
 
+//The directory containing a CMake configuration file for nlohmann-json.
+nlohmann-json_DIR:PATH=nlohmann-json_DIR-NOTFOUND
+
+//The directory containing a CMake configuration file for nlohmann_json.
+nlohmann_json_DIR:PATH=D:/vcpkg/vcpkg/installed/x64-windows/share/nlohmann_json
+
 
 ########################
 # INTERNAL cache entries
@@ -459,6 +465,8 @@ CMAKE_STRIP-ADVANCED:INTERNAL=1
 CMAKE_TOOLCHAIN_FILE-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: CMAKE_VERBOSE_MAKEFILE
 CMAKE_VERBOSE_MAKEFILE-ADVANCED:INTERNAL=1
+//Details about finding nlohmann_json
+FIND_PACKAGE_MESSAGE_DETAILS_nlohmann_json:INTERNAL=[D:/vcpkg/vcpkg/installed/x64-windows/share/nlohmann_json/nlohmann_jsonConfig.cmake][v3.10.5()]
 //Install the dependencies listed in your manifest:
 //\n    If this is off, you will have to manually install your dependencies.
 //\n    See https://github.com/microsoft/vcpkg/tree/master/docs/specifications/manifests.md
