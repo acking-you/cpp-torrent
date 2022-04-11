@@ -83,12 +83,6 @@ int main() {
     printStudent(tmp);
 }
 ```
-### 目前的Parse解析性能对比(Parse文件解析再写入操作)
->cpp version:(release版本)
-> ![cpp计时](img/img-cpp.png)
-
-> go version
-> ![go计时](img/img-go.png)
 
 就速度测试过程而言，go语言编译+运行非常的快，我cpp编译还要好一会儿。。。
 最终的运行速度，go语言稍逊一筹，但我认为主要原因可能是在gc上面，使得运算过程时快时慢，不太稳定。
